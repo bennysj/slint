@@ -72,6 +72,7 @@ pub enum BuiltinFunction {
     ColorTransparentize,
     ColorMix,
     ColorWithAlpha,
+    ColorToString,
     ImageSize,
     ArrayLength,
     Rgb,
@@ -218,6 +219,7 @@ declare_builtin_function_types!(
     ColorTransparentize: (Type::Brush, Type::Float32) -> Type::Brush,
     ColorWithAlpha: (Type::Brush, Type::Float32) -> Type::Brush,
     ColorMix: (Type::Color, Type::Color, Type::Float32) -> Type::Color,
+    ColorToString: (Type::Color) -> Type::String,
     ImageSize: (Type::Image) -> Type::Struct(Rc::new(Struct {
         fields: IntoIterator::into_iter([
             (SmolStr::new_static("width"), Type::Int32),
@@ -315,7 +317,8 @@ impl BuiltinFunction {
             | BuiltinFunction::ColorDarker
             | BuiltinFunction::ColorTransparentize
             | BuiltinFunction::ColorMix
-            | BuiltinFunction::ColorWithAlpha => true,
+            | BuiltinFunction::ColorWithAlpha
+            | BuiltinFunction::ColorToString => true,
             // ImageSize is pure, except when loading images via the network. Then the initial size will be 0/0 and
             // we need to make sure that calls to this function stay within a binding, so that the property
             // notification when updating kicks in. Only SlintPad (wasm-interpreter) loads images via the network,
@@ -392,7 +395,8 @@ impl BuiltinFunction {
             | BuiltinFunction::ColorDarker
             | BuiltinFunction::ColorTransparentize
             | BuiltinFunction::ColorMix
-            | BuiltinFunction::ColorWithAlpha => true,
+            | BuiltinFunction::ColorWithAlpha
+            | BuiltinFunction::ColorToString => true,
             BuiltinFunction::ImageSize => true,
             BuiltinFunction::ArrayLength => true,
             BuiltinFunction::Rgb => true,
@@ -1140,6 +1144,11 @@ impl Expression {
                     lhs: Box::new(self),
                     rhs: Box::new(Expression::NumberLiteral(0.01, Unit::None)),
                     op: '*',
+                },
+                (Type::Color, Type::String) => Expression::FunctionCall {
+                    function: Callable::Builtin(BuiltinFunction::ColorToString),
+                    arguments: vec![self],
+                    source_location: Some(node.to_source_location())
                 },
                 (ref from_ty @ Type::Struct(ref left), Type::Struct(right))
                     if left.fields != right.fields =>

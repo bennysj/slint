@@ -189,6 +189,9 @@ pub fn eval_expression(expression: &Expression, local_context: &mut EvalLocalCon
                 }
                 (Value::Number(n), Type::Color) => Color::from_argb_encoded(n as u32).into(),
                 (Value::Brush(brush), Type::Color) => brush.color().into(),
+                (Value::Brush(brush), Type::String) => {
+                    Value::String(brush.color().to_string())
+                },
                 (v, _) => v,
             }
         }
@@ -1083,6 +1086,16 @@ fn call_builtin_function(
                 }
             } else {
                 panic!("First argument not a color");
+            }
+        }
+        BuiltinFunction::ColorToString => {
+            if arguments.len() != 1 {
+                panic!("internal error: incorrect argument count to ColorToString")
+            }
+            if let Value::Brush(brush) = eval_expression(&arguments[0], local_context) {
+                Value::String(brush.color().to_string())
+            } else {
+                panic!("Argument not a Color");
             }
         }
         BuiltinFunction::ImageSize => {

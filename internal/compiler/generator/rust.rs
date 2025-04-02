@@ -3046,6 +3046,9 @@ fn compile_builtin_function_call(
             let alpha = a.next().unwrap();
             quote!(#x.with_alpha(#alpha as f32))
         }
+        BuiltinFunction::ColorToString => {
+            quote!(#(#a)*.to_string())
+        }
         BuiltinFunction::ImageSize => quote!( #(#a)*.size()),
         BuiltinFunction::ArrayLength => {
             quote!(match &#(#a)* { x => {

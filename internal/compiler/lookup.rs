@@ -985,6 +985,7 @@ impl LookupObject for ColorExpression<'_> {
             .or_else(|| f("transparentize", member_function(BuiltinFunction::ColorTransparentize)))
             .or_else(|| f("with-alpha", member_function(BuiltinFunction::ColorWithAlpha)))
             .or_else(|| f("mix", member_function(BuiltinFunction::ColorMix)))
+            .or_else(|| f("to-string", member_function(BuiltinFunction::ColorToString)))
     }
 }
 
