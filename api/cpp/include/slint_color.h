@@ -5,6 +5,7 @@
 
 #include "slint_color_internal.h"
 #include "slint_properties.h"
+#include "slint_string.h"
 
 #include <stdint.h>
 
@@ -194,6 +195,9 @@ public:
 
     /// Returns a new version of this color with the opacity set to \a alpha.
     [[nodiscard]] inline Color with_alpha(float alpha) const;
+
+    /// Returns hex color RGBA formated string '#rrggbbaa'.
+    [[nodiscard]] inline SharedString to_string() const;
 
     /// Returns true if \a lhs has the same values for the individual color channels as \a rhs;
     /// false otherwise.

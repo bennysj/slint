@@ -5,7 +5,7 @@
 This module contains color related types for the run-time library.
 */
 
-use crate::properties::InterpolatedPropertyValue;
+use crate::{properties::InterpolatedPropertyValue, SharedString};
 
 #[cfg(not(feature = "std"))]
 use num_traits::float::Float;
@@ -91,6 +91,12 @@ impl From<RgbaColor<f32>> for Color {
             blue: (col.blue * 255.).round() as u8,
             alpha: (col.alpha * 255.).round() as u8,
         }
+    }
+}
+
+impl Into<SharedString> for Color {
+    fn into(self) -> SharedString {
+        SharedString::from(std::format!("#{:02x}{:02x}{:02x}{:02x}", self.red, self.green, self.blue, self.alpha))
     }
 }
 
@@ -313,6 +319,12 @@ impl Color {
         let mut rgba: RgbaColor<f32> = (*self).into();
         rgba.alpha = alpha.clamp(0.0, 1.0);
         rgba.into()
+    }
+
+    /// Returns hex color RGBA formated string '#rrggbbaa'.
+    #[must_use]
+    pub fn to_string(self) -> SharedString {
+        self.into()
     }
 }
 

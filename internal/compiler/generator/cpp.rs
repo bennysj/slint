@@ -3627,6 +3627,9 @@ fn compile_builtin_function_call(
         BuiltinFunction::ColorWithAlpha => {
             format!("{}.with_alpha({})", a.next().unwrap(), a.next().unwrap())
         }
+        BuiltinFunction::ColorToString => {
+            format!("{}.to_string()", a.next().unwrap())
+        }
         BuiltinFunction::ImageSize => {
             format!("{}.size()", a.next().unwrap())
         }
