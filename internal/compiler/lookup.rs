@@ -799,6 +799,7 @@ impl LookupObject for BuiltinFunctionLookup {
         (MathFunctions, ColorFunctions)
             .for_each_entry(ctx, f)
             .or_else(|| f(&SmolStr::new_static("debug"), BuiltinMacroFunction::Debug.into()))
+            .or_else(|| f(&SmolStr::new_static("format"), BuiltinMacroFunction::Format.into()))
             .or_else(|| {
                 f(&SmolStr::new_static("animation-tick"), BuiltinFunction::AnimationTick.into())
             })

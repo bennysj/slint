@@ -281,7 +281,8 @@ pub fn to_value(env: &Env, unknown: JsUnknown, typ: &Type) -> Result<Value> {
         | Type::Easing
         | Type::PathData
         | Type::LayoutCache
-        | Type::ElementReference => Err(napi::Error::from_reason("reason")),
+        | Type::ElementReference
+        | Type::FormatArgument => Err(napi::Error::from_reason("reason")),
     }
 }
 

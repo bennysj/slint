@@ -29,6 +29,7 @@ pub fn lower_macro(
         BuiltinMacroFunction::Mod => mod_macro(n, sub_expr.collect(), diag),
         BuiltinMacroFunction::Abs => abs_macro(n, sub_expr.collect(), diag),
         BuiltinMacroFunction::Debug => debug_macro(n, sub_expr.collect(), diag),
+        BuiltinMacroFunction::Format => format_macro(n, sub_expr.collect(), diag),
         BuiltinMacroFunction::CubicBezier => {
             let mut has_error = None;
             let expected_argument_type_error =
@@ -315,7 +316,8 @@ fn to_debug_string(
         | Type::ElementReference
         | Type::LayoutCache
         | Type::Model
-        | Type::PathData => {
+        | Type::PathData
+        | Type::FormatArgument => {
             diag.push_error("Cannot debug this expression".into(), node);
             Expression::Invalid
         }
@@ -429,6 +431,71 @@ fn to_debug_string(
     }
 }
 
+fn format_macro(
+    node: &dyn Spanned,
+    args: Vec<(Expression, Option<NodeOrToken>)>,
+    diag: &mut BuildDiagnostics,
+) -> Expression {
+    let mut args_iter = args.into_iter();
+    let format_exp = args_iter.next().unwrap_or_else(|| (Expression::Invalid, None)).0;
+
+    match format_exp {
+        Expression::StringLiteral(s) => {
+            let format_args: Vec<_> =
+                args_iter.map(|(expr, node)| to_format_arg(expr, &node, diag)).collect();
+
+            let format_exp = Expression::StringFormatLiteral(s.clone());
+            let format_args =
+                Expression::Array { element_ty: Type::FormatArgument, values: format_args };
+
+            Expression::FunctionCall {
+                function: BuiltinFunction::StringFormat.into(),
+                arguments: vec![format_exp, format_args],
+                source_location: Some(node.to_source_location()),
+            }
+        }
+        _ => {
+            diag.push_error("The first argument must be a string-literal".into(), node);
+            Expression::Invalid
+        }
+    }
+}
+
+fn to_format_arg(expr: Expression, node: &dyn Spanned, diag: &mut BuildDiagnostics) -> Expression {
+    let ty = expr.ty();
+    match &ty {
+        Type::Invalid => Expression::Invalid,
+        Type::Void
+        | Type::InferredCallback
+        | Type::InferredProperty
+        | Type::Callback { .. }
+        | Type::ComponentFactory
+        | Type::Function { .. }
+        | Type::ElementReference
+        | Type::LayoutCache
+        | Type::Model
+        | Type::PathData
+        | Type::Struct { .. }
+        | Type::Enumeration { .. }
+        | Type::Color
+        | Type::Brush
+        | Type::Image
+        | Type::Easing
+        | Type::Array(_)
+        | Type::FormatArgument => {
+            diag.push_error("Cannot format this expression".into(), node);
+            Expression::Invalid
+        }
+        Type::Float32 | Type::Int32 | Type::Bool | Type::String => expr,
+        Type::Duration
+        | Type::PhysicalLength
+        | Type::LogicalLength
+        | Type::Rem
+        | Type::Angle
+        | Type::Percent
+        | Type::UnitProduct(_) => expr,
+    }
+}
 /// Generate an expression which is like `min(lhs, rhs)` if op is '<' or `max(lhs, rhs)` if op is '>'.
 /// counter is an unique id.
 /// The rhs and lhs of the expression must have the same numerical type

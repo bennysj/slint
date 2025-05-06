@@ -22,6 +22,7 @@ const INLINE_SINGLE_THRESHOLD: isize = ALLOC_COST * 10;
 fn expression_cost(exp: &Expression, ctx: &EvaluationContext) -> isize {
     let mut cost = match exp {
         Expression::StringLiteral(_) => ALLOC_COST,
+        Expression::StringFormatLiteral(_) => ALLOC_COST,
         Expression::NumberLiteral(_) => 0,
         Expression::BoolLiteral(_) => 0,
         Expression::PropertyReference(_) => PROPERTY_ACCESS_COST,
@@ -119,6 +120,7 @@ fn builtin_function_cost(function: &BuiltinFunction) -> isize {
         BuiltinFunction::StringCharacterCount => 50,
         BuiltinFunction::StringToLowercase => ALLOC_COST,
         BuiltinFunction::StringToUppercase => ALLOC_COST,
+        BuiltinFunction::StringFormat => ALLOC_COST,
         BuiltinFunction::ColorRgbaStruct => 50,
         BuiltinFunction::ColorHsvaStruct => 50,
         BuiltinFunction::ColorBrighter => 50,

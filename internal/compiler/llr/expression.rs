@@ -17,6 +17,8 @@ use std::rc::Rc;
 pub enum Expression {
     /// A string literal. The .0 is the content of the string, without the quotes
     StringLiteral(SmolStr),
+    /// The string literal for the first argument to 'format'
+    StringFormatLiteral(SmolStr),
     /// Number
     NumberLiteral(f64),
     /// Bool
@@ -217,6 +219,7 @@ impl Expression {
             | Type::InferredProperty
             | Type::InferredCallback
             | Type::ElementReference
+            | Type::FormatArgument
             | Type::LayoutCache => return None,
             Type::Float32
             | Type::Duration
@@ -266,6 +269,7 @@ impl Expression {
     pub fn ty(&self, ctx: &dyn TypeResolutionContext) -> Type {
         match self {
             Self::StringLiteral(_) => Type::String,
+            Self::StringFormatLiteral(_) => Type::String,
             Self::NumberLiteral(_) => Type::Float32,
             Self::BoolLiteral(_) => Type::Bool,
             Self::PropertyReference(prop) => ctx.property_ty(prop).clone(),
@@ -328,6 +332,7 @@ macro_rules! visit_impl {
     ($self:ident, $visitor:ident, $as_ref:ident, $iter:ident, $values:ident) => {
         match $self {
             Expression::StringLiteral(_) => {}
+            Expression::StringFormatLiteral(_) => {}
             Expression::NumberLiteral(_) => {}
             Expression::BoolLiteral(_) => {}
             Expression::PropertyReference(_) => {}

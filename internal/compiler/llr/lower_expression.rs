@@ -72,6 +72,7 @@ pub fn lower_expression(
         }
         tree_Expression::Uncompiled(_) => panic!(),
         tree_Expression::StringLiteral(s) => llr_Expression::StringLiteral(s.clone()),
+        tree_Expression::StringFormatLiteral(s) => llr_Expression::StringFormatLiteral(s.clone()),
         tree_Expression::NumberLiteral(n, unit) => {
             llr_Expression::NumberLiteral(unit.normalize(*n))
         }
@@ -208,7 +209,7 @@ pub fn lower_expression(
         tree_Expression::Array { element_ty, values } => llr_Expression::Array {
             element_ty: element_ty.clone(),
             values: values.iter().map(|e| lower_expression(e, ctx)).collect::<_>(),
-            as_model: true,
+            as_model: if *element_ty != Type::FormatArgument { true } else { false },
         },
         tree_Expression::Struct { ty, values } => llr_Expression::Struct {
             ty: ty.clone(),

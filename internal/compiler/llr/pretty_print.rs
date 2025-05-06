@@ -249,6 +249,7 @@ impl<'a, T> Display for DisplayExpression<'a, T> {
         let e = |e: &'a Expression| DisplayExpression(e, ctx);
         match self.0 {
             Expression::StringLiteral(x) => write!(f, "{x:?}"),
+            Expression::StringFormatLiteral(x) => write!(f, "{x:?}"),
             Expression::NumberLiteral(x) => write!(f, "{x:?}"),
             Expression::BoolLiteral(x) => write!(f, "{x:?}"),
             Expression::PropertyReference(x) => write!(f, "{}", DisplayPropertyRef(x, ctx)),

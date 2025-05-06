@@ -2187,6 +2187,10 @@ fn compile_expression(expr: &Expression, ctx: &EvaluationContext) -> TokenStream
             let s = s.as_str();
             quote!(sp::SharedString::from(#s))
         }
+        Expression::StringFormatLiteral(s) => {
+            let s = s.as_str();
+            quote!(#s)
+        }
         Expression::NumberLiteral(n) if n.is_finite() => quote!(#n),
         Expression::NumberLiteral(_) => quote!(0.),
         Expression::BoolLiteral(b) => quote!(#b),
@@ -2488,6 +2492,8 @@ fn compile_expression(expr: &Expression, ctx: &EvaluationContext) -> TokenStream
                         sp::vec![#(#val as _),*]
                     )
                 ))
+            } else if *element_ty == Type::FormatArgument {
+                quote!(#(#val),*)
             } else {
                 quote!(sp::Slice::from_slice(&[#(#val),*]))
             }
@@ -3019,6 +3025,12 @@ fn compile_builtin_function_call(
         }
         BuiltinFunction::StringToLowercase => quote!(sp::SharedString::from(#(#a)*.to_lowercase())),
         BuiltinFunction::StringToUppercase => quote!(sp::SharedString::from(#(#a)*.to_uppercase())),
+        BuiltinFunction::StringFormat => {
+            let format_exp = a.next().unwrap();
+            let format_args = a.next().unwrap();
+
+            quote!(sp::SharedString::from(format!(#format_exp, #format_args)))
+        },
         BuiltinFunction::ColorRgbaStruct => quote!( #(#a)*.to_argb_u8()),
         BuiltinFunction::ColorHsvaStruct => quote!( #(#a)*.to_hsva()),
         BuiltinFunction::ColorBrighter => {

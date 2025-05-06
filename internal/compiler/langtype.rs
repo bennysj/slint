@@ -64,6 +64,9 @@ pub enum Type {
 
     /// This is a `SharedArray<f32>`
     LayoutCache,
+
+    /// Used by format function
+    FormatArgument,
 }
 
 impl core::cmp::PartialEq for Type {
@@ -104,6 +107,7 @@ impl core::cmp::PartialEq for Type {
             Type::UnitProduct(a) => matches!(other, Type::UnitProduct(b) if a == b),
             Type::ElementReference => matches!(other, Type::ElementReference),
             Type::LayoutCache => matches!(other, Type::LayoutCache),
+            Type::FormatArgument => matches!(other, Type::FormatArgument),
         }
     }
 }
@@ -178,6 +182,7 @@ impl Display for Type {
             }
             Type::ElementReference => write!(f, "element ref"),
             Type::LayoutCache => write!(f, "layout cache"),
+            Type::FormatArgument => write!(f, "format argument"),
         }
     }
 }
@@ -314,6 +319,7 @@ impl Type {
             Type::UnitProduct(_) => None,
             Type::ElementReference => None,
             Type::LayoutCache => None,
+            Type::FormatArgument => None,
         }
     }
 

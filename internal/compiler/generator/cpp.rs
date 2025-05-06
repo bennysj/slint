@@ -3066,6 +3066,9 @@ fn compile_expression(expr: &llr::Expression, ctx: &EvaluationContext) -> String
         Expression::StringLiteral(s) => {
             format!(r#"slint::SharedString(u8"{}")"#, escape_string(s.as_str()))
         }
+        Expression::StringFormatLiteral(s) => {
+            format!(r#"u8"{}""#, escape_string(s.as_str()))
+        }
         Expression::NumberLiteral(num) => {
             if !num.is_finite() {
                 // just print something
@@ -3637,6 +3640,9 @@ fn compile_builtin_function_call(
         }
         BuiltinFunction::StringToUppercase => {
             format!("{}.to_uppercase()", a.next().unwrap())
+        }
+        BuiltinFunction::StringFormat => {
+            format!("slint::SharedString(std::format({},{}))", a.next().unwrap(), a.next().unwrap())
         }
         BuiltinFunction::ColorRgbaStruct => {
             format!("{}.to_argb_uint()", a.next().unwrap())

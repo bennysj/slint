@@ -67,6 +67,8 @@ pub enum BuiltinFunction {
     StringCharacterCount,
     StringToLowercase,
     StringToUppercase,
+    /// "{:02X}".format(i)
+    StringFormat,
     ColorRgbaStruct,
     ColorHsvaStruct,
     ColorBrighter,
@@ -128,6 +130,8 @@ pub enum BuiltinMacroFunction {
     /// transform the argument so it is always rgb(r, g, b, a) with r, g, b between 0 and 255.
     Rgb,
     Hsv,
+    /// transform 'format("{:x} - {:x}", n0, n1) into format("{:x} - {:x}", [n0, n1])
+    Format,
     /// transform `debug(a, b, c)` into debug `a + " " + b + " " + c`
     Debug,
 }
@@ -195,6 +199,7 @@ declare_builtin_function_types!(
     StringCharacterCount: (Type::String) -> Type::Int32,
     StringToLowercase: (Type::String) -> Type::String,
     StringToUppercase: (Type::String) -> Type::String,
+    StringFormat: (Type::String, Type::Array(Rc::new(Type::FormatArgument))) -> Type::String,
     ImplicitLayoutInfo(..): (Type::ElementReference) -> Type::Struct(typeregister::layout_info_type()),
     ColorRgbaStruct: (Type::Color) -> Type::Struct(Rc::new(Struct {
         fields: IntoIterator::into_iter([
@@ -319,6 +324,7 @@ impl BuiltinFunction {
             | BuiltinFunction::StringCharacterCount
             | BuiltinFunction::StringToLowercase
             | BuiltinFunction::StringToUppercase => true,
+            BuiltinFunction::StringFormat => false,
             BuiltinFunction::ColorRgbaStruct
             | BuiltinFunction::ColorHsvaStruct
             | BuiltinFunction::ColorBrighter
@@ -398,7 +404,8 @@ impl BuiltinFunction {
             | BuiltinFunction::StringIsEmpty
             | BuiltinFunction::StringCharacterCount
             | BuiltinFunction::StringToLowercase
-            | BuiltinFunction::StringToUppercase => true,
+            | BuiltinFunction::StringToUppercase
+            | BuiltinFunction::StringFormat => true,
             BuiltinFunction::ColorRgbaStruct
             | BuiltinFunction::ColorHsvaStruct
             | BuiltinFunction::ColorBrighter
@@ -572,6 +579,8 @@ pub enum Expression {
 
     /// A string literal. The .0 is the content of the string, without the quotes
     StringLiteral(SmolStr),
+    /// The string literal for the first argument to 'format'
+    StringFormatLiteral(SmolStr),
     /// Number
     NumberLiteral(f64, Unit),
     /// Bool
@@ -745,6 +754,7 @@ impl Expression {
             Expression::Invalid => Type::Invalid,
             Expression::Uncompiled(_) => Type::Invalid,
             Expression::StringLiteral(_) => Type::String,
+            Expression::StringFormatLiteral(_) => Type::String,
             Expression::NumberLiteral(_, unit) => unit.ty(),
             Expression::BoolLiteral(_) => Type::Bool,
             Expression::PropertyReference(nr) => nr.ty(),
@@ -866,6 +876,7 @@ impl Expression {
             Expression::Invalid => {}
             Expression::Uncompiled(_) => {}
             Expression::StringLiteral(_) => {}
+            Expression::StringFormatLiteral(_) => {}
             Expression::NumberLiteral(_, _) => {}
             Expression::BoolLiteral(_) => {}
             Expression::PropertyReference { .. } => {}
@@ -960,6 +971,7 @@ impl Expression {
             Expression::Invalid => {}
             Expression::Uncompiled(_) => {}
             Expression::StringLiteral(_) => {}
+            Expression::StringFormatLiteral(_) => {}
             Expression::NumberLiteral(_, _) => {}
             Expression::BoolLiteral(_) => {}
             Expression::PropertyReference { .. } => {}
@@ -1069,6 +1081,7 @@ impl Expression {
             Expression::Invalid => true,
             Expression::Uncompiled(_) => false,
             Expression::StringLiteral(_) => true,
+            Expression::StringFormatLiteral(_) => true,
             Expression::NumberLiteral(_, _) => true,
             Expression::BoolLiteral(_) => true,
             Expression::PropertyReference(nr) => nr.is_constant(),
@@ -1322,6 +1335,7 @@ impl Expression {
             | Type::InferredProperty
             | Type::InferredCallback
             | Type::ElementReference
+            | Type::FormatArgument
             | Type::LayoutCache => Expression::Invalid,
             Type::Void => Expression::CodeBlock(vec![]),
             Type::Float32 => Expression::NumberLiteral(0., Unit::None),
@@ -1618,6 +1632,7 @@ pub fn pretty_print(f: &mut dyn std::fmt::Write, expression: &Expression) -> std
         Expression::Invalid => write!(f, "<invalid>"),
         Expression::Uncompiled(u) => write!(f, "{u:?}"),
         Expression::StringLiteral(s) => write!(f, "{s:?}"),
+        Expression::StringFormatLiteral(s) => write!(f, "{s:?}"),
         Expression::NumberLiteral(vl, unit) => write!(f, "{vl}{unit}"),
         Expression::BoolLiteral(b) => write!(f, "{b:?}"),
         Expression::PropertyReference(a) => write!(f, "{a:?}"),
