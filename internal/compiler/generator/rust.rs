@@ -1714,6 +1714,7 @@ fn generate_sub_component_body(
         .collect::<Vec<_>>();
 
     let mut user_init_code: Vec<TokenStream> = Vec::new();
+    let mut user_deinit_code: Vec<TokenStream> = Vec::new();
 
     let mut sub_component_names: Vec<Ident> = Vec::new();
     let mut sub_component_types: Vec<Ident> = Vec::new();
@@ -1747,6 +1748,9 @@ fn generate_sub_component_body(
         )?;));
         user_init_code.push(quote!(#sub_component_id::user_init(
             sp::VRcMapped::map(self_rc.clone(), |x| #sub_compo_field.apply_pin(x)),
+        );));
+        user_deinit_code.push(quote!(#sub_component_id::user_deinit(
+            #sub_compo_field.apply_pin(_self)
         );));
 
         let sub_component_repeater_count = sc.repeater_count(root);
@@ -1899,6 +1903,11 @@ fn generate_sub_component_body(
     });
 
     user_init_code.extend(component.init_code.iter().map(|e| {
+        let code = compile_expression(&e.borrow(), &ctx);
+        quote!(#code;)
+    }));
+
+    user_deinit_code.extend(component.deinit_code.iter().map(|e| {
         let code = compile_expression(&e.borrow(), &ctx);
         quote!(#code;)
     }));
@@ -2090,6 +2099,10 @@ fn generate_sub_component_body(
             }
 
             #(#chunk_fns)*
+
+            pub(super) fn user_deinit(_self: ::core::pin::Pin<&Self>) {
+                #(#user_deinit_code)*
+            }
 
             pub(super) fn visit_dynamic_children(
                 self: ::core::pin::Pin<&Self>,
@@ -2673,6 +2686,7 @@ fn generate_item_tree_body(
             Some(quote!(
                 impl sp::PinnedDrop for #inner_component_id {
                     fn drop(self: ::core::pin::Pin<&mut #inner_component_id>) {
+                        #inner_component_id::user_deinit(self.as_ref());
                         sp::vtable::new_vref!(let vref : VRef<sp::ItemTreeVTable> for sp::ItemTree = self.as_ref().get_ref());
                         if let Some(wa) = self.globals.get().unwrap().maybe_window_adapter_impl() {
                             sp::unregister_item_tree(self.as_ref(), vref, Self::item_array(), &wa);

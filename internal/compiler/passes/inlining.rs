@@ -76,6 +76,10 @@ pub fn inline(doc: &Document, inline_selection: InlineSelection, diag: &mut Buil
         let mut init_code = component.init_code.borrow_mut();
         let inlined_init_code = core::mem::take(&mut init_code.inlined_init_code);
         init_code.constructor_code.splice(0..0, inlined_init_code.into_values().flatten());
+
+        let mut deinit_code = component.deinit_code.borrow_mut();
+        let inlined_deinit_code = core::mem::take(&mut deinit_code.inlined_deinit_code);
+        deinit_code.destructor_code.splice(0..0, inlined_deinit_code.into_values());
     }
 }
 
@@ -552,6 +556,16 @@ fn inline_element(
             .unwrap_or(elem);
         InitCodeEntry { owner: Rc::downgrade(owner), code }
     };
+
+    let fixup_deinit_expression = |mut deinit_code: Expression| {
+        // Fix up any property references from within already collected deinit code.
+        visit_named_references_in_expression(&mut deinit_code, &mut |nr| {
+            fixup_reference(nr, &mapping)
+        });
+        fixup_element_references(&mut deinit_code, &mapping);
+        deinit_code
+    };
+
     let inlined_init_code = inlined_component
         .init_code
         .borrow()
@@ -568,11 +582,27 @@ fn inline_element(
         .map(fixup_init_entry)
         .collect();
 
+    let inlined_deinit_code = inlined_component
+        .deinit_code
+        .borrow()
+        .inlined_deinit_code
+        .values()
+        .cloned()
+        .chain(inlined_component.deinit_code.borrow().destructor_code.iter().cloned())
+        .map(fixup_deinit_expression)
+        .collect::<Vec<_>>();
+
     root_component
         .init_code
         .borrow_mut()
         .inlined_init_code
         .insert(elem.borrow().span().offset, inlined_init_code);
+
+    root_component
+        .deinit_code
+        .borrow_mut()
+        .inlined_deinit_code
+        .insert(elem.borrow().span().offset, Expression::CodeBlock(inlined_deinit_code));
 
     // Now fixup all bindings and references
     for e in mapping.values() {
@@ -749,6 +779,7 @@ fn duplicate_sub_component(
         child_insertion_points: component_to_duplicate.child_insertion_points.clone(),
         declared_slots: component_to_duplicate.declared_slots.clone(),
         init_code: component_to_duplicate.init_code.clone(),
+        deinit_code: component_to_duplicate.deinit_code.clone(),
         popup_windows: Default::default(),
         timers: component_to_duplicate.timers.clone(),
         menu_item_tree: Default::default(),

@@ -1,0 +1,134 @@
+// Copyright © SixtyFPS GmbH <info@slint.dev>
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
+
+// Verify that the deinit callback is invoked in the correct order
+
+import { ExportedGlobal } from "../../helper_components/export_globals.slint";
+
+export global DeinitOrder {
+    in-out property <string> observed-order: "start";
+}
+
+component Sub1 inherits Rectangle {
+    deinit => {
+        DeinitOrder.observed-order += "|sub1";
+    }
+}
+
+component Sub2 inherits Rectangle {
+    deinit => {
+        DeinitOrder.observed-order += "|sub2";
+    }
+}
+
+component SubSub inherits Rectangle {
+    deinit => {
+        DeinitOrder.observed-order += "|subsub";
+    }
+}
+
+component Sub3 inherits Rectangle {
+    in-out property <string> some-value: "should-not-show-up";
+    deinit => {
+        DeinitOrder.observed-order += some-value;
+    }
+    SubSub {}
+}
+
+component Container inherits Rectangle {
+    in property <string> name-inside: "container";
+    deinit => {
+        DeinitOrder.observed-order += "|" + self.name-inside;
+    }
+    @children
+}
+
+component InsideRepeater inherits Rectangle {
+    in property <int> index;
+    deinit => {
+        DeinitOrder.observed-order += "(i" + self.index + ")";
+    }
+    @children
+}
+
+export component TestCase inherits Rectangle {
+    width: 300phx;
+    height: 300phx;
+    in property <bool> show-components: true;
+
+    if show-components:
+        Sub1 {
+            deinit => {
+                DeinitOrder.observed-order += "|sub1-use-site";
+            }
+        }
+
+    if show-components:
+        Sub2 {
+        }
+
+    if show-components:
+        Sub3 {
+            some-value: "|sub3";
+        }
+
+    if show-components:
+        Container {
+            property <string> name-outside: "container-instantiation";
+            deinit => {
+                DeinitOrder.observed-order += "|" + self.name-outside;
+            }
+        }
+
+    if show-components:
+        Rectangle {
+            deinit => {
+                DeinitOrder.observed-order += "|element";
+            }
+        }
+
+    for i in 2: InsideRepeater {
+        index: i;
+        deinit => {
+            DeinitOrder.observed-order += "|repeater";
+            DeinitOrder.observed-order += i;
+        }
+        Rectangle {}
+    }
+
+    in-out property <string> test_global_prop_value: DeinitOrder.observed-order;
+
+    in-out property <string> expected_static_order: "start|sub1|sub2|subsub|sub3|container|root|sub1-use-site|container-instantiation|element";
+
+    in-out property <bool> test: DeinitOrder.observed-order == expected_static_order;
+}
+
+/*
+```rust
+let instance = TestCase::new().unwrap();
+println!("Coso asdfsafd");
+// assert!(instance.get_test());
+slint_testing::send_mouse_click(&instance, 5., 5.);
+instance.set_show_components(false);
+slint_testing::send_mouse_click(&instance, 5., 5.);
+assert_eq!(instance.global::<DeinitOrder<'_>>().get_observed_order(), instance.get_expected_static_order() + "|repeater0(i0)|repeater1(i1)");
+```
+
+```cpp
+auto handle = TestCase::create();
+const TestCase &instance = *handle;
+assert(instance.get_test());
+slint_testing::send_mouse_click(&instance, 5., 5.);
+assert_eq(instance.global<DeinitOrder>().get_observed_order(),  instance.get_expected_static_order() + "|repeater0(i0)|repeater1(i1)");
+```
+
+
+```js
+var instance = new slint.TestCase({});
+assert(instance.test);
+slintlib.private_api.send_mouse_click(instance, 5., 5.);
+assert.equal(instance.test_global_prop_value,  instance.expected_static_order + "|repeater0(i0)|repeater1(i1)");
+```
+
+
+*/

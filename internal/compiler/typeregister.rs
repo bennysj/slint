@@ -433,6 +433,7 @@ pub fn reserved_properties() -> impl Iterator<Item = (&'static str, Type, Proper
             ),
         ]))
         .chain(std::iter::once(("init", noarg_callback_type(), PropertyVisibility::Private)))
+        .chain(std::iter::once(("deinit", noarg_callback_type(), PropertyVisibility::Private)))
         .chain(reserved_member_functions().map(|(name, f, v)| (name, Type::Function(f.ty()), v)))
 }
 

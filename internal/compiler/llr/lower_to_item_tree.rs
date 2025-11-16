@@ -847,6 +847,7 @@ fn new_sub_component(
         const_properties: Default::default(),
         pre_init_code: Default::default(),
         init_code: Default::default(),
+        deinit_code: Default::default(),
         geometries: Default::default(),
         // just initialize to dummy expression right now and it will be set later
         layout_info_h: super::Expression::BoolLiteral(false).into(),
@@ -913,6 +914,13 @@ fn lower_sub_component_tail(
         .init_code
         .borrow()
         .iter_without_font_registration()
+        .map(|e| super::lower_expression::lower_expression(e, ctx).into())
+        .collect();
+
+    sub_component.deinit_code = component
+        .deinit_code
+        .borrow()
+        .iter()
         .map(|e| super::lower_expression::lower_expression(e, ctx).into())
         .collect();
 

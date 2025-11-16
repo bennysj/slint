@@ -565,6 +565,9 @@ pub struct SubComponent {
     /// Code that is run in the sub component constructor, after property initializations
     pub init_code: Vec<MutExpression>,
 
+    /// Code that is run when the sub component is disposed
+    pub deinit_code: Vec<MutExpression>,
+
     /// For each node, an expression that returns a `{x: length, y: length, width: length, height: length}`
     pub geometries: Vec<Option<MutExpression>>,
 
@@ -849,6 +852,9 @@ impl CompilationUnit {
                 visitor(e, ctx);
             }
             for e in &sc.init_code {
+                visitor(e, ctx);
+            }
+            for e in &sc.deinit_code {
                 visitor(e, ctx);
             }
             for (_, e) in &sc.property_init {
