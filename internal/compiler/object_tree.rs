@@ -25,6 +25,7 @@ use smol_str::{SmolStr, ToSmolStr, format_smolstr};
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::f32::consts::E;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
@@ -446,6 +447,25 @@ impl InitCode {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct DeinitCode {
+    // Code from deinit callbacks collected from elements
+    pub destructor_code: Vec<Expression>,
+
+    /// Code inserted from inlined components, ordered by offset of the place where it was inlined from. This way
+    /// we can preserve the order across multiple inlining passes.
+    pub inlined_deinit_code: BTreeMap<usize, Expression>,
+}
+
+impl DeinitCode {
+    pub fn iter(&self) -> impl Iterator<Item = &Expression> {
+        self.destructor_code.iter().chain(self.inlined_deinit_code.values())
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Expression> {
+        self.destructor_code.iter_mut().chain(self.inlined_deinit_code.values_mut())
+    }
+}
+
 /// A component is a type in the language which can be instantiated,
 /// Or is materialized for repeated expression.
 #[derive(Default, Debug)]
@@ -469,6 +489,7 @@ pub struct Component {
     pub child_insertion_point: RefCell<Option<ChildrenInsertionPoint>>,
 
     pub init_code: RefCell<InitCode>,
+    pub deinit_code: RefCell<DeinitCode>,
 
     pub popup_windows: RefCell<Vec<PopupWindow>>,
     pub timers: RefCell<Vec<Timer>>,
@@ -1132,6 +1153,17 @@ impl Element {
             node.CallbackConnection().for_each(|cb| {
                 if parser::identifier_text(&cb).is_some_and(|s| s == "init") {
                     error_on(&cb, "an 'init' callback")
+                }
+            });
+            node.CallbackDeclaration().for_each(|cb| {
+                if parser::identifier_text(&cb.DeclaredIdentifier()).is_some_and(|s| s == "deinit")
+                {
+                    error_on(&cb, "a 'deinit' callback")
+                }
+            });
+            node.CallbackConnection().for_each(|cb| {
+                if parser::identifier_text(&cb).is_some_and(|s| s == "deinit") {
+                    error_on(&cb, "a 'deinit' callback")
                 }
             });
 
@@ -2649,6 +2681,9 @@ pub fn visit_element_expressions(
     let component = elem.borrow().enclosing_component.upgrade().unwrap();
     if Rc::ptr_eq(&component.root_element, elem) {
         for e in component.init_code.borrow_mut().iter_mut() {
+            vis(e, None, &|| Type::Void);
+        }
+        for e in component.deinit_code.borrow_mut().iter_mut() {
             vis(e, None, &|| Type::Void);
         }
     }

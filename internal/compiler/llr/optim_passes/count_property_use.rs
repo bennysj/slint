@@ -39,6 +39,10 @@ pub fn count_property_use(root: &CompilationUnit) {
         for expr in &sc.init_code {
             expr.borrow().visit_property_references(ctx, &mut visit_property);
         }
+        // 3.1. the deinit code
+        for expr in &sc.deinit_code {
+            expr.borrow().visit_property_references(ctx, &mut visit_property);
+        }
         // 4. the models
         for (idx, r) in sc.repeated.iter_enumerated() {
             r.model.borrow().visit_property_references(ctx, &mut visit_property);

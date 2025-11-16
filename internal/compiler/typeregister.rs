@@ -283,6 +283,7 @@ pub fn reserved_properties() -> impl Iterator<Item = (&'static str, Type, Proper
             ),
         ]))
         .chain(std::iter::once(("init", noarg_callback_type(), PropertyVisibility::Private)))
+        .chain(std::iter::once(("deinit", noarg_callback_type(), PropertyVisibility::Private)))
 }
 
 /// lookup reserved property injected in every item

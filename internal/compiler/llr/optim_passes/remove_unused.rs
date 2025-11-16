@@ -293,6 +293,7 @@ mod visitor {
             two_way_bindings,
             const_properties,
             init_code,
+            deinit_code,
             geometries,
             layout_info_h,
             layout_info_v,
@@ -376,6 +377,9 @@ mod visitor {
             visit_local_member_reference(c, &scope, state, visitor);
         }
         for i in init_code {
+            visit_expression(i.get_mut(), &scope, state, visitor);
+        }
+        for i in deinit_code {
             visit_expression(i.get_mut(), &scope, state, visitor);
         }
         for g in geometries.iter_mut().flatten() {

@@ -10,6 +10,7 @@ mod clip;
 mod collect_custom_fonts;
 mod collect_globals;
 mod collect_init_code;
+mod collect_deinit_code;
 mod collect_libraries;
 mod collect_structs_and_enums;
 mod collect_subcomponents;
@@ -132,6 +133,7 @@ pub async fn run_passes(
         repeater_component::process_repeater_components(component);
         lower_popups::lower_popups(component, &doc.local_registry, diag);
         collect_init_code::collect_init_code(component);
+        collect_deinit_code::collect_deinit_code(component);
         lower_timers::lower_timers(component, diag);
     });
 

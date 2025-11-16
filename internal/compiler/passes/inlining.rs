@@ -69,6 +69,10 @@ pub fn inline(doc: &Document, inline_selection: InlineSelection, diag: &mut Buil
         let mut init_code = component.init_code.borrow_mut();
         let inlined_init_code = core::mem::take(&mut init_code.inlined_init_code);
         init_code.constructor_code.splice(0..0, inlined_init_code.into_values());
+
+        let mut deinit_code = component.deinit_code.borrow_mut();
+        let inlined_deinit_code = core::mem::take(&mut deinit_code.inlined_deinit_code);
+        deinit_code.destructor_code.splice(0..0, inlined_deinit_code.into_values());
     }
 }
 
@@ -447,6 +451,7 @@ fn duplicate_sub_component(
         root_constraints: component_to_duplicate.root_constraints.clone(),
         child_insertion_point: component_to_duplicate.child_insertion_point.clone(),
         init_code: component_to_duplicate.init_code.clone(),
+        deinit_code: component_to_duplicate.deinit_code.clone(),
         popup_windows: Default::default(),
         timers: component_to_duplicate.timers.clone(),
         menu_item_tree: Default::default(),

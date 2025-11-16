@@ -231,6 +231,13 @@ fn analyze_element(
                 process_property(prop, r, context, reverse_aliases, diag);
             });
         }
+
+        for e in component.deinit_code.borrow().iter() {
+            recurse_expression(elem, e, &mut |prop, r| {
+                process_property(prop, r, context, reverse_aliases, diag);
+            });
+        }
+
         component.root_constraints.borrow_mut().visit_named_references(&mut |nr| {
             process_property(&nr.clone().into(), P, context, reverse_aliases, diag);
         });

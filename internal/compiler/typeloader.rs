@@ -376,6 +376,7 @@ impl Snapshotter {
                 ),
                 used: component.used.clone(),
                 init_code: RefCell::new(component.init_code.borrow().clone()),
+                deinit_code: RefCell::new(component.deinit_code.borrow().clone()),
                 inherits_popup_window: std::cell::Cell::new(component.inherits_popup_window.get()),
                 optimized_elements,
                 parent_element,
