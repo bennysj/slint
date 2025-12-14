@@ -222,8 +222,9 @@ pub fn any_wgpu27_adapters_with_gpu(requested_graphics_api: Option<RequestedGrap
         }
         Some(_) => return false,
     };
-    instance
-        .enumerate_adapters(backends)
+    poll_once(instance
+        .enumerate_adapters(backends))
+        .unwrap()
         .into_iter()
         .any(|adapter| adapter.get_info().device_type != wgpu::DeviceType::Cpu)
 }
@@ -273,7 +274,7 @@ pub fn init_instance_adapter_device_queue_surface(
             // wgpu uses async here, but the returned future is ready on first poll on all platforms except WASM,
             // which we don't support right now.
             let adapter = poll_once(async {
-                match wgpu::util::initialize_adapter_from_env(&instance, Some(&surface)) {
+                match wgpu::util::initialize_adapter_from_env(&instance, Some(&surface)).await {
                     Ok(adapter) => Ok(adapter),
                     Err(_) => {
                         instance
