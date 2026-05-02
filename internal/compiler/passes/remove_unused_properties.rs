@@ -28,6 +28,7 @@ pub fn remove_unused_properties(doc: &Document) {
                                 .iter()
                                 .any(|t| matches!(t, TwoWayBinding::ModelData { .. }))
                         })
+                        && decl.visibility != crate::object_tree::PropertyVisibility::Export
                     {
                         to_remove.insert(prop.to_owned());
                     }

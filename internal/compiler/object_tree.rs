@@ -742,6 +742,7 @@ pub enum PropertyVisibility {
     Input,
     Output,
     InOut,
+    Export,
     /// for builtin properties that must be known at compile time and cannot be changed at runtime
     Constexpr,
     /// For builtin properties that are meant to just be bindings but cannot be read or written
@@ -759,6 +760,7 @@ impl Display for PropertyVisibility {
             PropertyVisibility::Input => f.write_str("in"),
             PropertyVisibility::Output => f.write_str("out"),
             PropertyVisibility::InOut => f.write_str("in-out"),
+            PropertyVisibility::Export => f.write_str("export"),
             PropertyVisibility::Constexpr => f.write_str("constexpr"),
             PropertyVisibility::Public => f.write_str("public"),
             PropertyVisibility::Protected => f.write_str("protected"),
@@ -1767,6 +1769,10 @@ impl Element {
                     ("private", None) => visibility = Some(PropertyVisibility::Private),
                     ("private", Some(_)) => {
                         diag.push_error("Extra 'private' keyword".into(), &token)
+                    }
+                    ("export", None) => visibility = Some(PropertyVisibility::Export),
+                    ("export", Some(_)) => {
+                        diag.push_error("Extra 'export' keyword".into(), &token)
                     }
                     _ => (),
                 }

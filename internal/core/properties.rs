@@ -1178,6 +1178,8 @@ pub use erased_bindings::*;
 mod properties_animations;
 pub use properties_animations::*;
 
+use crate::lengths::LogicalLength;
+
 /// Value of the state property
 /// A state is just the current state, but also has information about the previous state and the moment it changed
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
@@ -1431,6 +1433,144 @@ impl<DirtyHandler> PropertyTracker<true, DirtyHandler> {
     pub fn set_dirty(&self) {
         self.holder.dirty.set(true);
         unsafe { mark_dependencies_dirty(self.holder.dependencies.as_ptr() as *mut _) };
+    }
+}
+
+/// This enum is used to represent the value of a property of an item, which can be of different types.
+pub enum PropertyValue {
+    /// The value is a length, which is represented by a `LogicalLength` struct.
+    Length(crate::lengths::LogicalLength),
+    /// The value is a color, which is represented by a `Color` struct.
+    Color(crate::Color),
+    /// The value is a boolean, which is represented by a `bool`.
+    Bool(bool),
+    /// The value is an integer, which is represented by an `i32`.
+    Int(i32),
+    /// The value is a floating-point number, which is represented by a `f32`.
+    Float(f32),
+    /// The value is a string, which is represented by a `SharedString`.
+    String(crate::SharedString),
+    /// For arrays and structs the value is represented by a boxed pointer to a `dyn Any` trait object.
+    Object(Box<dyn std::any::Any>),
+}
+
+/// This trait is implemented by the user for each custom item delegate that's defined in `.slint` markup,
+#[allow(dead_code)]
+pub trait ItemPropertyHandle {
+    /// This function is called by the rendering code to get the value of a property of the item.
+    fn get(&self) -> PropertyValue;
+
+    /// This function is called by the rendering code to set the value of a property of the item.
+    fn set(&self, value: PropertyValue);
+}
+
+
+impl From<PropertyValue> for LogicalLength {
+    fn from(value: PropertyValue) -> Self {
+        match value {
+            PropertyValue::Length(l) => l,
+            _ => panic!("PropertyValue is not a Length"),
+        }
+    }
+}
+
+impl Into<PropertyValue> for LogicalLength {
+    fn into(self) -> PropertyValue {
+        PropertyValue::Length(self)
+    }
+}
+
+impl From<PropertyValue> for crate::Color {
+    fn from(value: PropertyValue) -> Self {
+        match value {
+            PropertyValue::Color(c) => c,
+            _ => panic!("PropertyValue is not a Color"),
+        }
+    }
+}
+
+impl Into<PropertyValue> for crate::Color {
+    fn into(self) -> PropertyValue {
+        PropertyValue::Color(self)
+    }
+}
+
+impl From<PropertyValue> for bool {
+    fn from(value: PropertyValue) -> Self {
+        match value {
+            PropertyValue::Bool(b) => b,
+            _ => panic!("PropertyValue is not a Bool"),
+        }
+    }
+}
+impl Into<PropertyValue> for bool {
+    fn into(self) -> PropertyValue {
+        PropertyValue::Bool(self)
+    }
+}
+
+impl From<PropertyValue> for i32 {
+    fn from(value: PropertyValue) -> Self {
+        match value {
+            PropertyValue::Int(i) => i,
+            _ => panic!("PropertyValue is not an Int"),
+        }
+    }
+}
+
+impl Into<PropertyValue> for i32 {
+    fn into(self) -> PropertyValue {
+        PropertyValue::Int(self)
+    }
+}
+
+impl From<PropertyValue> for f32 {
+    fn from(value: PropertyValue) -> Self {
+        match value {
+            PropertyValue::Float(f) => f,
+            _ => panic!("PropertyValue is not a Float"),
+        }
+    }
+}
+
+impl Into<PropertyValue> for f32 {
+    fn into(self) -> PropertyValue {
+        PropertyValue::Float(self)
+    }
+}
+
+impl From<PropertyValue> for crate::SharedString {
+    fn from(value: PropertyValue) -> Self {
+        match value {
+            PropertyValue::String(s) => s,
+            _ => panic!("PropertyValue is not a SharedString"),
+        }
+    }
+}
+
+impl Into<PropertyValue> for crate::SharedString {
+    fn into(self) -> PropertyValue {
+        PropertyValue::String(self)
+    }
+}
+
+impl<T: From<PropertyValue> + 'static> From<PropertyValue> for crate::model::ModelRc<T> {
+    fn from(value: PropertyValue) -> Self {
+        match value {
+            PropertyValue::Object(o) => {
+                let Ok(value) = o.downcast::<crate::model::ModelRc<T>>() else {
+                    panic!("PropertyValue is not a ModelRc");
+                };
+                *value
+            },
+            _ => panic!("PropertyValue is not a ModelRc"),
+        }
+    }
+}
+
+impl<T: Into<PropertyValue> + 'static> Into<PropertyValue> for crate::model::ModelRc<T> {
+    fn into(self) -> PropertyValue {
+        PropertyValue::Object(Box::new(self) as Box<dyn std::any::Any>)
     }
 }
 

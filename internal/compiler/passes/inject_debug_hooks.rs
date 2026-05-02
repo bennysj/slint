@@ -201,7 +201,8 @@ fn property_defaults(
                 PropertyVisibility::Output
                 | PropertyVisibility::Constexpr
                 | PropertyVisibility::Protected
-                | PropertyVisibility::Fake => return None,
+                | PropertyVisibility::Fake
+                | PropertyVisibility::Export => return None,
             }
             let default = Expression::default_value_for_type(&lookup.property_type);
             if matches!(default, Expression::Invalid) {

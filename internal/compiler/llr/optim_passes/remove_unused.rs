@@ -305,6 +305,7 @@ mod visitor {
         idx: SubComponentIdx,
         SubComponent {
             name: _,
+            component: _,
             properties: _,
             callbacks: _,
             functions,

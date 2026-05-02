@@ -117,7 +117,7 @@ pub fn parse_element_content(p: &mut impl Parser) {
                     if p.nth(1).as_str() == "property"
                         && matches!(
                             p.peek().as_str(),
-                            "in" | "out" | "in_out" | "in-out" | "private"
+                            "in" | "out" | "in_out" | "in-out" | "private" | "export"
                         ) =>
                 {
                     parse_property_declaration(&mut *p, None);
@@ -680,7 +680,7 @@ fn parse_member_attributes(p: &mut impl Parser) -> Option<&'static str> {
 /// ```
 fn parse_property_declaration<P: Parser>(p: &mut P, checkpoint: Option<P::Checkpoint>) {
     let checkpoint = checkpoint.unwrap_or_else(|| p.checkpoint());
-    while matches!(p.peek().as_str(), "in" | "out" | "in-out" | "in_out" | "private") {
+    while matches!(p.peek().as_str(), "in" | "out" | "in-out" | "in_out" | "private" | "export") {
         p.consume();
     }
     if p.peek().as_str() != "property" {

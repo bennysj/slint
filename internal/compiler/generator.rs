@@ -445,6 +445,7 @@ pub fn for_each_const_properties(
                     .iter()
                     .filter(|(_, x)| {
                         x.property_type.is_property_type() &&
+                        x.visibility != crate::object_tree::PropertyVisibility::Export &&
                             !matches!( &x.property_type, crate::langtype::Type::Struct(s) if matches!(s.name, StructName::Builtin(BuiltinStruct::StateInfo)))
                     })
                     .map(|(k, _)| k.clone()),

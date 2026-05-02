@@ -365,6 +365,7 @@ fn lower_sub_component(
 ) -> LoweredSubComponent {
     let mut sub_component = SubComponent {
         name: component_id(component),
+        component: component.clone(),
         properties: Default::default(),
         callbacks: Default::default(),
         functions: Default::default(),
@@ -472,7 +473,13 @@ fn lower_sub_component(
             } else {
                 let index = sub_component.properties.push_and_get_key(Property {
                     name: format_smolstr!("{}_{}", elem.id, p),
+                    orig_name: p.clone(),
                     ty: x.property_type.clone(),
+                    use_count: if x.visibility == crate::object_tree::PropertyVisibility::Export {
+                        1.into()
+                    } else {
+                        0.into()
+                    },
                     ..Property::default()
                 });
                 index.into()

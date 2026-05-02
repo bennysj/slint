@@ -32,6 +32,11 @@
     //-is_internal
 }
 
+export component CustomComponent inherits Empty {
+    in property <brush> background;
+    callback init-render();
+}
+
 component Rectangle inherits Empty {
     /// The background brush of this `Rectangle`, filling its geometry. \{#sls.ref.rectangle.background}
     ///

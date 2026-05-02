@@ -441,6 +441,222 @@ declare_item_vtable! {
     fn slint_get_RectangleVTable() -> RectangleVTable for Rectangle
 }
 
+
+#[derive(Default, Clone)]
+struct CustomItemPainterState {
+    brush: Brush,
+    line_color: Brush,
+    line_width: LogicalLength,
+}
+
+impl CustomItemPainterState {
+    fn pin_mut(&mut self) -> Pin<&mut Self> {
+        Pin::new(self)
+    }
+}
+
+impl RenderRectangle for CustomItemPainterState {
+    fn background(self: Pin<&Self>) -> Brush {
+        self.brush.clone()
+    }
+}
+
+impl RenderBorderRectangle for CustomItemPainterState {
+    fn background(self: Pin<&Self>) -> Brush {
+        Brush::SolidColor(Color::from_argb_u8(0, 0, 0,0))
+    }
+    fn border_width(self: Pin<&Self>) -> LogicalLength {
+        self.line_width
+    }
+    fn border_radius(self: Pin<&Self>) -> LogicalBorderRadius {
+        LogicalBorderRadius::default()
+    }
+    fn border_color(self: Pin<&Self>) -> Brush {
+        self.line_color.clone()
+    }
+}
+
+struct CustomItemPainterImpl<'a> {
+    backend: std::cell::RefCell<ItemRendererRef<'a>>,
+    state: std::cell::RefCell<CustomItemPainterState>,
+    cached_rendering_data: &'a CachedRenderingData,
+    self_rc: &'a ItemRc,
+    size: &'a LogicalSize,
+}
+
+impl<'a> CustomItemPainterImpl<'a> {
+    fn new(
+        backend: ItemRendererRef<'a>,
+        cached_rendering_data: &'a CachedRenderingData,
+        self_rc: &'a ItemRc,
+        size: &'a LogicalSize,
+    ) -> Self {
+        Self {
+            backend: std::cell::RefCell::new(backend),
+            state: std::cell::RefCell::new(CustomItemPainterState::default()),
+            cached_rendering_data,
+            self_rc,
+            size,
+        }
+    }
+}
+
+impl<'a> crate::api::ItemPainter for CustomItemPainterImpl<'a> {
+    fn position(&self) -> crate::api::LogicalPosition {
+        let origin = self.self_rc.geometry().origin;
+        crate::api::LogicalPosition { x: origin.x, y: origin.y }
+    }
+
+    fn size(&self) -> crate::api::LogicalSize {
+        crate::api::LogicalSize { width: self.size.width, height: self.size.height }
+    }
+
+    fn save_state(&self) {
+        self.backend.borrow_mut().save_state();
+    }
+
+    fn restore_state(&self) {
+        self.backend.borrow_mut().restore_state();
+    }
+
+    fn translate(&self, offset: LogicalPosition) {
+        self.backend.borrow_mut().translate(LogicalVector::new(offset.x, offset.y));
+    }
+
+    fn set_brush(&self, brush: Brush) {
+        self.state.borrow_mut().brush = brush;
+    }
+
+    fn set_line_brush(&self, brush: Brush) {
+        self.state.borrow_mut().line_color = brush;
+    }
+
+    fn set_line_width(&self, width: f32) {
+        self.state.borrow_mut().line_width = LogicalLength::new(width);
+    }
+
+    fn fill_rectangle(&self, rect: crate::api::LogicalSize) {
+        let mut state = self.state.borrow_mut();
+        let rect_size = LogicalSize::new(rect.width, rect.height);
+        self.backend.borrow_mut().draw_rectangle(state.pin_mut(), self.self_rc, rect_size, self.cached_rendering_data);
+    }
+
+    fn draw_rectangle(&self, rect: crate::api::LogicalSize) {
+        let mut state = self.state.borrow_mut();
+        let rect_size = LogicalSize::new(rect.width, rect.height);
+        self.backend.borrow_mut().draw_border_rectangle(state.pin_mut(), self.self_rc, rect_size, self.cached_rendering_data);
+    }
+}
+
+#[repr(C)]
+#[derive(FieldOffsets, Default, SlintElement)]
+#[pin]
+/// The implementation of the `CustomComponent` element
+pub struct CustomComponent {
+    pub background: Property<Brush>,
+    pub item_delegate: std::cell::OnceCell<Rc<dyn crate::api::CustomItemDelegate>>,
+    pub cached_rendering_data: CachedRenderingData,
+}
+
+impl Item for CustomComponent {
+    fn init(self: Pin<&Self>, _self_rc: &ItemRc) {}
+
+    fn deinit(self: Pin<&Self>, _window_adapter: &Rc<dyn WindowAdapter>) {}
+
+    fn layout_info(
+        self: Pin<&Self>,
+        _orientation: Orientation,
+        _cross_axis_constraint: Coord,
+        _window_adapter: &Rc<dyn WindowAdapter>,
+        _self_rc: &ItemRc,
+    ) -> LayoutInfo {
+        LayoutInfo { stretch: 1., ..LayoutInfo::default() }
+    }
+
+    fn input_event_filter_before_children(
+        self: Pin<&Self>,
+        _: &MouseEvent,
+        _window_adapter: &Rc<dyn WindowAdapter>,
+        _self_rc: &ItemRc,
+        _: &mut MouseCursorInner,
+    ) -> InputEventFilterResult {
+        InputEventFilterResult::ForwardAndIgnore
+    }
+
+    fn input_event(
+        self: Pin<&Self>,
+        _: &MouseEvent,
+        _window_adapter: &Rc<dyn WindowAdapter>,
+        _self_rc: &ItemRc,
+        _: &mut MouseCursorInner,
+    ) -> InputEventResult {
+        InputEventResult::EventIgnored
+    }
+
+    fn capture_key_event(
+        self: Pin<&Self>,
+        _: &InternalKeyEvent,
+        _window_adapter: &Rc<dyn WindowAdapter>,
+        _self_rc: &ItemRc,
+    ) -> KeyEventResult {
+        KeyEventResult::EventIgnored
+    }
+
+    fn key_event(
+        self: Pin<&Self>,
+        _: &InternalKeyEvent,
+        _window_adapter: &Rc<dyn WindowAdapter>,
+        _self_rc: &ItemRc,
+    ) -> KeyEventResult {
+        KeyEventResult::EventIgnored
+    }
+
+    fn focus_event(
+        self: Pin<&Self>,
+        _: &FocusEvent,
+        _window_adapter: &Rc<dyn WindowAdapter>,
+        _self_rc: &ItemRc,
+    ) -> FocusEventResult {
+        FocusEventResult::FocusIgnored
+    }
+
+    fn render(
+        self: Pin<&Self>,
+        backend: &mut ItemRendererRef,
+        self_rc: &ItemRc,
+        size: LogicalSize,
+    ) -> RenderingResult {
+        let painter =
+            CustomItemPainterImpl::new(&mut **backend, &self.cached_rendering_data, self_rc, &size);
+        self.item_delegate.get().unwrap().render(&painter);
+        RenderingResult::ContinueRenderingChildren
+    }
+
+    fn bounding_rect(
+        self: core::pin::Pin<&Self>,
+        _window_adapter: &Rc<dyn WindowAdapter>,
+        _self_rc: &ItemRc,
+        geometry: LogicalRect,
+    ) -> LogicalRect {
+        geometry
+    }
+
+    fn clips_children(self: core::pin::Pin<&Self>) -> bool {
+        false
+    }
+}
+
+impl ItemConsts for CustomComponent {
+    const cached_rendering_data_offset: const_field_offset::FieldOffset<
+        CustomComponent,
+        CachedRenderingData,
+    > = CustomComponent::FIELD_OFFSETS.cached_rendering_data().as_unpinned_projection();
+}
+
+declare_item_vtable! {
+    fn slint_get_CustomComponentVTable() -> CustomComponentVTable for CustomComponent
+}
+
 #[repr(C)]
 #[derive(FieldOffsets, Default, SlintElement)]
 #[pin]

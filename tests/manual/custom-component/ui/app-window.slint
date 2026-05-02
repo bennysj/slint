@@ -1,0 +1,55 @@
+// Copyright © Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com
+// SPDX-License-Identifier: MIT
+
+export struct FancyData {
+    int1: int,
+    float2: float,
+    float-array3: [float],
+}
+
+export global FancyLogic {
+    in-out property <length> fancy-spacing: 20px;
+    in-out property <length> fancy-size: 100px;
+
+    in-out property <color> color1: red;
+    in-out property <color> color2: green;
+    in-out property <color> color3: blue;
+    in-out property <FancyData> fancy-data;
+    in-out property <[FancyData]> fancy-data-array;
+}
+
+enum FancyEnum {
+    Value1,
+    Value2,
+    Value3,
+}
+
+@rust-attr(delegate(crate::FancyItemDelegate))
+component FancyComponent {
+    export property <length> ex-fancy-spacing: FancyLogic.fancy-spacing;
+    export property <length> ex-fancy-size: FancyLogic.fancy-size;
+    export property <color> ex-fancy-color;
+    export property <bool> ex-fancy-bool;
+    export property <int> ex-fancy-int;
+    export property <float> ex-fancy-float;
+    export property <[float]> ex-fancy-float-array;
+    export property <[[float]]> ex-fancy-float-array2;
+    export property <FancyData> ex-fancy-data;
+    export property <[FancyData]> ex-fancy-data-array;
+    export property <FancyEnum> ex-fancy-enum;
+
+    function compute_size() -> length {
+        return ex-fancy-spacing * 2 + 100px;
+    }
+}
+
+export component AppWindow inherits Window {
+    export property <length> ex-fancy-spacing;
+    preferred-width: 700px;
+    preferred-height: 700px;
+
+    FancyComponent {
+        width: parent.width;
+        height: parent.height;
+    }
+}

@@ -33,7 +33,7 @@ use itertools::Either;
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{format_ident, quote};
 use smol_str::SmolStr;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
 #[derive(Clone)]
@@ -219,10 +219,12 @@ pub fn generate(
 
     let inner_module = generate_types(&doc.used_types.borrow().structs_and_enums, &llr);
 
+    let mut property_type_map = HashSet::new();
+
     let sub_compos = llr
         .used_sub_components
         .iter()
-        .map(|sub_compo| generate_sub_component(*sub_compo, &llr, None, None, false))
+        .map(|sub_compo| generate_sub_component(*sub_compo, &llr, None, None, false, Some(&mut property_type_map)))
         .collect::<Vec<_>>();
     let public_components =
         llr.public_components.iter().map(|p| generate_public_component(p, &llr, compiler_config));
@@ -473,6 +475,18 @@ fn generate_public_component(
                 #vis fn global<'a, T: slint::Global<'a, Self>>(&'a self) -> T {
                     T::get(&self)
                 }
+
+                #vis fn find_global<'a, T: slint::GlobalId<'a> + 'static>(&self) -> Option<T> {
+                    let Some(global) = self.0.globals.get().unwrap().find_global::<T>() else {
+                        return None;
+                    };
+
+                    let Ok(global) = global.downcast::<T>() else {
+                        return None;
+                    };
+
+                    Some(*global)
+                }
             )
         };
         match llr.top_level_type {
@@ -536,6 +550,13 @@ fn generate_public_component(
         }
     };
 
+    let delegate_init = if llr.top_level_type != llr::TopLevelComponentType::SystemTrayIcon {
+        quote!(#inner_component_id::delegate_init(sp::VRc::map(component.0.clone(), |x| x), &component);)
+    } else {
+        // SystemTrayIcon don't implement ComponentHandle, so we don't want to call the delegate_init.
+        quote!()
+    };
+
     quote!(
         #component
         pub struct #public_component_id(sp::VRc<sp::ItemTreeVTable, #inner_component_id>);
@@ -548,7 +569,9 @@ fn generate_public_component(
                 #eager_create_window
                 #inner_component_id::user_init(sp::VRc::map(inner.clone(), |x| x));
                 #ensure_tree_instantiated
-                ::core::result::Result::Ok(Self(inner))
+                let component = Self(inner);
+                #delegate_init
+                ::core::result::Result::Ok(component)
             }
 
             #[cfg(#experimental)]
@@ -560,7 +583,9 @@ fn generate_public_component(
 
                 #inner_component_id::user_init(sp::VRc::map(inner.clone(), |x| x));
                 #ensure_tree_instantiated
-                ::core::result::Result::Ok(Self(inner))
+                let component = Self(inner);
+                #delegate_init
+                ::core::result::Result::Ok(component)
             }
 
             #new_with_existing_window_impl
@@ -690,6 +715,26 @@ fn generate_shared_globals(
         )
     });
 
+    let find_global_code = llr
+        .globals
+        .iter()
+        .filter(|g| g.exported || g.from_library)
+        .map(|g| {
+            let inner_type = global_inner_name(g);
+            let public_type = ident(&g.name);
+            let global_name = format_ident!("global_{}", ident(&g.name));
+
+            quote!(
+                if T::inner_type_id() == core::any::TypeId::of::<#inner_type>() {
+                    return Some(Box::new(#public_type(
+                        self.#global_name.clone(),
+                        ::core::marker::PhantomData::default(),
+                    )) as Box<dyn std::any::Any>);
+                }
+            )
+        })
+        .collect::<Vec<_>>();
+
     quote! {
         #pub_token struct SharedGlobals {
             #(#pub_token #global_names : ::core::pin::Pin<sp::Rc<#global_types>>,)*
@@ -749,6 +794,14 @@ fn generate_shared_globals(
             }
 
             #optional_window_adapter_helpers
+
+            fn find_global<'a, T: slint::GlobalId<'a> + 'static>(&self) -> Option<Box<dyn std::any::Any>>
+            where
+                Self: Sized
+            {
+                #(#find_global_code)*
+                None
+            }
         }
     }
 }
@@ -1295,6 +1348,7 @@ fn generate_sub_component(
     parent_ctx: Option<&ParentScope>,
     index_property: Option<llr::PropertyIdx>,
     pinned_drop: bool,
+    mut property_type_map: Option<&mut HashSet<String>>
 ) -> TokenStream {
     let component = &root.sub_components[component_idx];
     let inner_component_id = inner_component_id(component);
@@ -1314,7 +1368,7 @@ fn generate_sub_component(
                 root,
                 Some(&ParentScope::new(&ctx, None)),
                 None,
-                true,
+                true
             )
         })
         .chain(component.menu_item_trees.iter().map(|tree| {
@@ -1565,9 +1619,280 @@ fn generate_sub_component(
         .collect::<Vec<_>>();
 
     let mut user_init_code: Vec<TokenStream> = Vec::new();
-
+    let mut delegate_init_code: Vec<TokenStream> = Vec::new();
+    let mut delegate_property_handle_code: Vec<TokenStream> = Vec::new();
+    let mut rust_attr_diagnostics: Vec<TokenStream> = Vec::new();
     let mut sub_component_names: Vec<Ident> = Vec::new();
     let mut sub_component_types: Vec<Ident> = Vec::new();
+
+    let mut parse_rust_attr = || {
+        if let Some(node) = component.component.node.as_ref() {
+            node.AtRustAttr().for_each(|attr| {
+                let mut report_error = |message| {
+                    let source_location = crate::diagnostics::Spanned::to_source_location(&attr);
+                    let error = format!("Error, invalid @rust-attr at {source_location}. {message}");
+                    rust_attr_diagnostics.push(quote!(compile_error!(#error);));
+                };
+
+                let rust_attr = attr.text().to_string();
+                let rust_attr = rust_attr.trim();
+
+                if let Some(delegate_args) = rust_attr.strip_prefix("delegate") {
+                    let syntax_hint = "delegate(crate::MyCustomItemDelegate)";
+                    let delegate_args = delegate_args.trim();
+
+                    if !delegate_args.starts_with('(') || !delegate_args.ends_with(')') {
+                        report_error(format!("Invalid delegate syntax. Expected '{syntax_hint}'"));
+                        return;
+                    }
+                    let rust_delegate = delegate_args[1..delegate_args.len() - 1].trim();
+
+                    if rust_delegate.is_empty() {
+                        report_error(format!(
+                            "Delegate must not be empty. Expected '{syntax_hint}'"
+                        ));
+                        return;
+                    }
+
+                    // Check that the component with the delegate doesn't inherit from any other component.
+                    let base_type = &component.component.root_element.borrow().base_type;
+                    match base_type {
+                        crate::langtype::ElementType::Native(base_class) => {
+                            if base_class.class_name.as_str() != "Empty" {
+                                report_error(format!(
+                                    "Component with a delegate can't inherit from any native type, but inherits from '{}'", base_class.class_name
+                                ));
+                                return;
+                            }
+                        }
+                        crate::langtype::ElementType::Component(base_class) => {
+                            report_error(format!(
+                                "Component with a delegate can't inherit from any other component, but inherits from '{}'", base_class.id
+                            ));
+                            return;
+                        }
+                        _ => unreachable!()
+                    }
+
+                    let rust_delegate_ts = match TokenStream::from_str(rust_delegate) {
+                        Ok(ts) => ts,
+                        Err(_) => {
+                            report_error(format!(
+                                "'{rust_delegate}' is not a valid Rust identifier or path"
+                            ));
+                            return;
+                        }
+                    };
+                    let Some(property_type_map) = property_type_map.as_mut() else {
+                        report_error("Property type map is not available".to_string());
+                        return;
+                    };
+
+                    assert!(item_names.len() >= 1);
+                    assert!(item_types.len() >= 1);
+                    item_types[0] = ident("CustomComponent");
+                    let item_name0 = &item_names[0];
+
+                    let mut property_map_insert_code: Vec<TokenStream> = Vec::new();
+                    let mut property_from_code: Vec<TokenStream> = Vec::new();
+
+                    for (property, declared_type) in component
+                        .properties
+                        .iter()
+                        .zip(declared_property_types.iter()) {
+
+
+                        let item_property_handle_id = format_ident!("{}_{}_PropertyHandle", ident(&component.name), ident(&property.orig_name));
+                        let property_id = ident(&property.name);
+                        let property_type = declared_type.to_string();
+
+                        if matches!(&property.ty, Type::Struct(_) | Type::Enumeration(_)) && !property_type_map.contains(&property_type) {
+                            let panic_msg = format!("PropertyValue is not a {} struct or enum", declared_type);
+
+                            property_from_code.push(quote!(
+                                impl From<sp::PropertyValue> for #declared_type {
+                                    fn from(value: sp::PropertyValue) -> Self {
+                                        match value {
+                                            sp::PropertyValue::Object(o) => {
+                                                let Ok(o) = o.downcast::<#declared_type>() else {
+                                                    panic!(#panic_msg);
+                                                };
+                                                *o
+                                            },
+                                            _ => panic!(#panic_msg),
+                                        }
+                                    }
+                                }
+
+                                impl Into<sp::PropertyValue> for #declared_type {
+                                    fn into(self) -> sp::PropertyValue {
+                                        sp::PropertyValue::Object(Box::new(self) as Box<dyn std::any::Any>)
+                                    }
+                                }
+                            ));
+
+                            property_type_map.insert(property_type.to_string());
+                        }
+                        let panic_msg = format!("Can't set property {}, value is not matching type {}", property.orig_name, property.ty);
+                        let (getter_code, setter_code) =
+                        match &property.ty {
+                            Type::Bool => {
+                                // generate_property_from_impl("Bool");
+                                (quote!(
+                                    sp::PropertyValue::Bool({*&#inner_component_id::FIELD_OFFSETS.#property_id() }.apply_pin(_self).get())
+                                ),
+                                quote!(
+                                    let sp::PropertyValue::Bool(value) = value else { panic!(#panic_msg); };
+                                    {*&#inner_component_id::FIELD_OFFSETS.#property_id() }.apply_pin(_self).set(value);
+                                ))
+                            }
+                            Type::Int32 => {
+                                // generate_property_from_impl("Int");
+                                (quote!(
+                                    sp::PropertyValue::Int({*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .get())
+                                ),
+                                quote!(
+                                    let sp::PropertyValue::Int(value) = value else { panic!(#panic_msg); };
+                                    {*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .set(value);
+                                ))
+                            }
+                            Type::Float32 => {
+                                (quote!(
+                                    sp::PropertyValue::Float({*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .get())
+                                ),
+                                quote!(
+                                    let sp::PropertyValue::Float(value) = value else { panic!(#panic_msg); };
+                                    {*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .set(value);
+                                ))
+                            }
+                            Type::String => {
+                                (quote!(
+                                    sp::PropertyValue::String({*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .get())
+                                ),
+                                quote!(
+                                    let sp::PropertyValue::String(value) = value else { panic!(#panic_msg); };
+                                    {*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .set(value);
+                                ))
+                            }
+                            Type::Color => {
+                                (quote!(
+                                    sp::PropertyValue::Color({*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .get())
+                                ),
+                                quote!(
+                                    let sp::PropertyValue::Color(value) = value else { panic!(#panic_msg); };
+                                    {*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .set(value);
+                                ))
+                            }
+                            Type::LogicalLength => {
+                                (quote!(
+                                    sp::PropertyValue::Length({*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .get())
+                                ),
+                                quote!(
+                                    let sp::PropertyValue::Length(value) = value else { panic!(#panic_msg); };
+                                    {*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .set(value);
+                                ))
+                            }
+                            Type::Array(_) | Type::Struct(_) | Type::Enumeration(_) => {
+                                (quote!(
+                                    sp::PropertyValue::Object(Box::new({*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .get()) as Box<dyn std::any::Any>)
+                                ),
+                                quote!(
+                                    let sp::PropertyValue::Object(value) = value else { panic!(#panic_msg); };
+                                    let Ok(value) = value.downcast::<#declared_type>() else {
+                                        panic!(#panic_msg);
+                                    };
+                                    {*&#inner_component_id::FIELD_OFFSETS.#property_id() }
+                                        .apply_pin(_self)
+                                        .set(*value);
+                                ))
+                            }
+                            _ => {
+                                let msg = format!("Property type {} is not yet supported for delegate property handles", property.ty);
+                                (quote!(
+                                    todo!(#msg);
+                                ),
+                                quote!(
+                                    let _ = value;
+                                    todo!(#msg);
+                                ))
+                            }
+                        };
+
+                        delegate_property_handle_code.push(quote!(
+                            #[derive(Clone)]
+                            struct #item_property_handle_id {
+                                self_weak: sp::VWeakMapped<sp::ItemTreeVTable, #inner_component_id>,
+                            }
+
+                            impl #item_property_handle_id {
+                                fn new(self_rc: &sp::VRcMapped<sp::ItemTreeVTable, #inner_component_id>) -> std::rc::Rc<dyn sp::ItemPropertyHandle> {
+                                    std::rc::Rc::new(Self {
+                                        self_weak: sp::VRcMapped::downgrade(self_rc),
+                                    })
+                                }
+                            }
+
+                            impl sp::ItemPropertyHandle for #item_property_handle_id {
+                                fn get(&self) -> sp::PropertyValue {
+                                    let self_rc = self.self_weak.upgrade().unwrap();
+                                    let _self = self_rc.as_pin_ref();
+                                    #getter_code
+                                }
+
+                                fn set(&self, value: sp::PropertyValue) {
+                                    let self_rc = self.self_weak.upgrade().unwrap();
+                                    let _self = self_rc.as_pin_ref();
+                                    #setter_code
+                                }
+                            }
+                        ));
+
+                        let property_key = property.orig_name.to_string();
+                        property_map_insert_code.push(quote!(
+                            let property_handle = slint::ItemProperty::new(#item_property_handle_id::new(&self_rc));
+                            property_map.insert(#property_key, property_handle);
+                        ));
+                    }
+
+                    delegate_property_handle_code.push(quote!(#(#property_from_code)*));
+
+                    delegate_init_code.push(quote!(
+                        let mut property_map: slint::ItemPropertyMap = std::collections::HashMap::new();
+                        #(#property_map_insert_code)*
+                        let item_delegate = std::rc::Rc::new(#rust_delegate_ts::default());
+                        item_delegate.init(handle, property_map);
+                        _self.#item_name0.item_delegate.set(item_delegate.clone());
+                    ));
+                } else {
+                    report_error(format!("Unknown attribute '{rust_attr}'"));
+                }
+            });
+        }
+    };
+
+    parse_rust_attr();
 
     for sub in &component.sub_components {
         let field_name = ident(&sub.name);
@@ -1598,6 +1923,10 @@ fn generate_sub_component(
         )?;));
         user_init_code.push(quote!(#sub_component_id::user_init(
             sp::VRcMapped::map(self_rc.clone(), |x| #sub_compo_field.apply_pin(x)),
+        );));
+        delegate_init_code.push(quote!(#sub_component_id::delegate_init(
+            sp::VRcMapped::map(self_rc.clone(), |x| #sub_compo_field.apply_pin(x)),
+            handle,
         );));
 
         let sub_component_repeater_count = sc.repeater_count(root);
@@ -1863,6 +2192,8 @@ fn generate_sub_component(
     let pin_macro = if pinned_drop { quote!(#[pin_drop]) } else { quote!(#[pin]) };
 
     quote!(
+        #(#rust_attr_diagnostics)*
+
         #[derive(sp::FieldOffsets, Default)]
         #[const_field_offset(sp::const_field_offset)]
         #[repr(C)]
@@ -1884,6 +2215,8 @@ fn generate_sub_component(
             tree_index: ::core::cell::Cell<u32>,
             tree_index_of_first_child: ::core::cell::Cell<u32>,
         }
+
+        #(#delegate_property_handle_code)*
 
         impl #inner_component_id {
             // Shorthands used by the generated expression code: these accesses are
@@ -1919,7 +2252,14 @@ fn generate_sub_component(
                 #(#user_init_code)*
             }
 
+
             #(#chunk_fns)*
+
+            fn delegate_init<T: slint::ComponentHandle + 'static>(self_rc: sp::VRcMapped<sp::ItemTreeVTable, Self>, handle: &T) {
+                #![allow(unused)]
+                let _self = self_rc.as_pin_ref();
+                #(#delegate_init_code)*
+            }
 
             fn visit_dynamic_children(
                 self: ::core::pin::Pin<&Self>,
@@ -2227,6 +2567,13 @@ fn generate_global(
             impl<'a> #public_component_id<'a> {
                 #property_and_callback_accessors
             }
+
+            impl<'a> slint::GlobalId<'a> for #public_component_id<'a> {
+                fn inner_type_id() -> core::any::TypeId {
+                    core::any::TypeId::of::<#inner_component_id>()
+                }
+            }
+
             #(pub type #aliases<'a> = #public_component_id<'a>;)*
             #getters
 
@@ -2311,7 +2658,7 @@ fn generate_item_tree(
     root: &llr::CompilationUnit,
     parent_ctx: Option<&ParentScope>,
     index_property: Option<llr::PropertyIdx>,
-    is_popup: bool,
+    is_popup: bool
 ) -> TokenStream {
     let needs_window_adapter = root.needs_window_adapter();
     let sub_comp = generate_sub_component(
@@ -2320,6 +2667,7 @@ fn generate_item_tree(
         parent_ctx,
         index_property,
         needs_window_adapter,
+        None
     );
     let inner_component_id = self::inner_component_id(&root.sub_components[sub_tree.root]);
     let parent_component_type = parent_ctx

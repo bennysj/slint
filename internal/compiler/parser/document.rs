@@ -63,8 +63,8 @@ pub fn parse_document(p: &mut impl Parser) -> bool {
                 }
                 let is_export = p.peek().as_str() == "export";
                 let i = if is_export { 1 } else { 0 };
-                if !matches!(p.nth(i).as_str(), "enum" | "struct") {
-                    p.error("Expected enum or struct after @rust-attr");
+                if !matches!(p.nth(i).as_str(), "enum" | "struct" | "component") {
+                    p.error("Expected enum, struct, or component after @rust-attr");
                     continue;
                 }
                 let r = if is_export {
@@ -73,6 +73,8 @@ pub fn parse_document(p: &mut impl Parser) -> bool {
                     parse_struct_declaration(&mut *p, Some(checkpoint))
                 } else if p.peek().as_str() == "enum" {
                     parse_enum_declaration(&mut *p, Some(checkpoint))
+                } else if p.peek().as_str() == "component" {
+                    parse_component(&mut *p, Some(checkpoint))
                 } else {
                     false
                 };
@@ -81,7 +83,7 @@ pub fn parse_document(p: &mut impl Parser) -> bool {
                 }
             }
             _ => {
-                if !parse_component(&mut *p) {
+                if !parse_component(&mut *p, None) {
                     break;
                 }
             }
@@ -105,7 +107,7 @@ pub fn parse_document(p: &mut impl Parser) -> bool {
 /// component C inherits D { }
 /// interface I { property<int> xx; }
 /// ```
-pub fn parse_component(p: &mut impl Parser) -> bool {
+pub fn parse_component<P: Parser>(p: &mut P, checkpoint: Option<P::Checkpoint>) -> bool {
     let simple_component = p.nth(1).kind() == SyntaxKind::ColonEqual;
     let is_global = !simple_component && p.peek().as_str() == "global";
     let is_interface = !simple_component && p.peek().as_str() == "interface";
@@ -116,7 +118,7 @@ pub fn parse_component(p: &mut impl Parser) -> bool {
         );
         return false;
     }
-    let mut p = p.start_node(SyntaxKind::Component);
+    let mut p = p.start_node_at(checkpoint, SyntaxKind::Component);
     if is_global || is_new_component || is_interface {
         p.consume();
     }
@@ -265,7 +267,7 @@ fn parse_export<P: Parser>(p: &mut P, checkpoint: Option<P::Checkpoint>) -> bool
         p.consume();
         p.expect(SyntaxKind::Semicolon)
     } else {
-        parse_component(&mut *p)
+        parse_component(&mut *p, checkpoint)
     }
 }
 

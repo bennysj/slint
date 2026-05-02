@@ -198,8 +198,8 @@ pub mod re_exports {
     pub use i_slint_core::model::*;
     pub use i_slint_core::open_url;
     pub use i_slint_core::properties::{
-        ChangeTracker, Property, PropertyTracker, StateInfo, change_tracker_init_erased,
-        set_animated_property_binding_erased, set_callback_handler_erased,
+        ChangeTracker, Property, PropertyTracker, StateInfo, PropertyValue, ItemPropertyHandle,
+        change_tracker_init_erased,set_animated_property_binding_erased, set_callback_handler_erased,
         set_property_binding_erased, set_property_state_binding_erased, set_state_binding,
     };
     pub use i_slint_core::slice::Slice;

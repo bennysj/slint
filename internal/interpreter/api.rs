@@ -1778,6 +1778,12 @@ impl ComponentHandle for ComponentInstance {
     {
         unreachable!()
     }
+
+    fn find_global<'a, T: GlobalId<'a> + 'static>(&self) -> Option<T>
+    where
+        Self: Sized {
+        unreachable!()
+    }
 }
 
 impl From<ComponentInstance>

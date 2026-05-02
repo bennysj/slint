@@ -7,6 +7,7 @@ use derive_more::{From, Into};
 use smol_str::SmolStr;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
+use std::rc::Rc;
 use std::sync::Arc;
 use typed_index_collections::TiVec;
 
@@ -350,6 +351,7 @@ impl TwoWayBinding {
 #[derive(Debug, Default)]
 pub struct Property {
     pub name: SmolStr,
+    pub orig_name: SmolStr,
     pub ty: Type,
     /// The amount of time this property is used of another property
     /// This property is only valid after the [`count_property_use`](super::optim_passes::count_property_use) pass
@@ -529,6 +531,7 @@ impl TreeNode {
 #[derive(Debug)]
 pub struct SubComponent {
     pub name: SmolStr,
+    pub component: Rc<crate::object_tree::Component>,
     pub properties: TiVec<PropertyIdx, Property>,
     pub callbacks: TiVec<CallbackIdx, Callback>,
     pub functions: TiVec<FunctionIdx, Function>,

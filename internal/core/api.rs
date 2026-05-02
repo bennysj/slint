@@ -940,6 +940,13 @@ pub trait Global<'a, Component> {
     fn as_weak(&self) -> Weak<Self::StaticSelf>;
 }
 
+/// This trait is implemented by the compiler for each slint global that's exported,
+/// and allows to obtain the TypeId of the inner global type.
+pub trait GlobalId<'a> {
+    /// Internal function to obtain the TypeId of the inner global type.
+    fn inner_type_id() -> core::any::TypeId;
+}
+
 /// This trait marks types that hold a strong reference to a Slint component.
 ///
 /// The Slint compiler automatically implements this trait for [generated components](index.html#generated-components) and the `'static` variant of [generated Globals](index.html#exported-global-singletons).
@@ -1106,6 +1113,15 @@ pub trait ComponentHandle: StrongHandle {
     /// This function provides access to instances of global singletons exported in `.slint`.
     /// See [`Global`] for an example how to export and access globals from `.slint` markup.
     fn global<'a, T: Global<'a, Self>>(&'a self) -> T
+    where
+        Self: Sized;
+
+    /// This function provides access to instances of global singletons exported in `.slint`,
+    /// only having a reference to the ComponentHandle. This is more slower then the `global` function,
+    /// as it needs to search through the list of globals for the right type, but it can be used in
+    /// cases where you don't have access to the Window component.
+    /// See [`Global`] for an example how to export and access globals from `.slint` markup.
+    fn find_global<'a, T: GlobalId<'a> + 'static>(&self) -> Option<T>
     where
         Self: Sized;
 }
@@ -1446,3 +1462,63 @@ pub fn set_xdg_app_id(app_id: impl Into<SharedString>) -> Result<(), PlatformErr
         |ctx| ctx.set_xdg_app_id(app_id.into()),
     )
 }
+
+/// This trait is provided for the user to implement custom painting of items in a custom item delegate.
+pub trait ItemPainter {
+    /// The position of the item being painted, relative to the top left corner of the window.
+    fn position(&self) -> LogicalPosition;
+    /// The size of the item being painted.
+    fn size(&self) -> LogicalSize;
+    /// Save the state of the painter, so that it can be restored later with `restore_state()`.
+    fn save_state(&self);
+    /// Translate the coordinate system of the painter by the given offset.
+    fn translate(&self, offset: LogicalPosition);
+    /// Restore the state of the painter to the last saved state.
+    fn restore_state(&self);
+    /// Set the brush to be used for painting filled objects.
+    fn set_brush(&self, brush: Brush);
+    /// Set the brush to be used for painting lines.
+    fn set_line_brush(&self, brush: Brush);
+    /// Set the width of lines to be drawn.
+    fn set_line_width(&self, width: f32);
+    /// Fill a rectangle with the current brush.
+    fn fill_rectangle(&self, rect: LogicalSize);
+    /// Draw the outline of a rectangle with the current brush.
+    fn draw_rectangle(&self, rect: LogicalSize);
+}
+
+/// This trait is implemented by the user for each custom item delegate that's defined in `.slint` markup,
+/// and allows to use it in the `rust-delegate` annotation in `.slint`
+pub trait CustomItemDelegate {
+    /// This function is called by the rendering code to paint the item.
+    fn render(&self, painter: &dyn ItemPainter);
+}
+
+use crate::properties::{PropertyValue, ItemPropertyHandle};
+
+/// This struct is a wrapper around a reference-counted pointer to an object that implements the `ItemPropertyHandle` trait.
+#[derive(Clone)]
+pub struct ItemProperty {
+    handle: std::rc::Rc<dyn ItemPropertyHandle>,
+}
+
+impl ItemProperty {
+    /// Creates a new `ItemProperty` from a reference-counted pointer to an object that implements the `ItemPropertyHandle` trait.
+    pub fn new(handle: std::rc::Rc<dyn ItemPropertyHandle>) -> Self {
+        Self { handle }
+    }
+
+    /// Returns the value of the property.
+    pub fn get<T: From<PropertyValue>>(&self) -> T {
+        T::from(self.handle.get())
+    }
+
+    /// Sets the value of the property.
+    pub fn set<T: Into<PropertyValue>>(&self, value: T) {
+        self.handle.set(value.into());
+    }
+}
+
+/// This type is a HashMap that maps the name of a property (as a static string) to a reference-counted
+/// pointer to an object that implements the `ItemPropertyHandle` trait.
+pub type ItemPropertyMap = std::collections::HashMap<&'static str, ItemProperty>;

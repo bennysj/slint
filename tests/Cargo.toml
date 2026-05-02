@@ -23,6 +23,7 @@ members = [
   'manual/module-builds/blogica',
   'manual/module-builds/blogicb',
   'manual/module-builds/app',
+  'manual/custom-component',
   'issues/test-11836-project/test-app',
   'issues/test-11836-project/test-library',
 ]
